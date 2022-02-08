@@ -35,7 +35,6 @@
         color: black;
         font-size: 1em;
         font-weight: bold;
-        color: black;
         cursor: pointer;
       }
       #hide-hud:hover {
@@ -71,6 +70,122 @@
     </style>
 
     <script>
+
+      (function (root, factory) {
+        if (typeof define === "function" && define.amd) {
+          define(["leaflet"], factory);
+        } else if (typeof module === "object" && module.exports) {
+          factory(require("leaflet"));
+        } else {
+          factory(root.L);
+        }
+      } (this, function (L) {
+        "use strict";
+
+        /*
+         * L.MultiOptionsPolyline is a MultiPolyLine which parts can be styled differently.
+         * options: {
+         *     multiOptions: {
+         *         optionIdxFn: function (latLng, prevLatLng, index, allLatlngs),
+         *         fnContext: ctx, // the context to call optionIdxFn (optional)
+         *         options: [{}, {}, {}] or function, // options for the index returned by optionIdxFn. If supplied with a function then it will be called with the index
+         *         copyBaseOptions: true
+         *     },
+         *     // other options from Polyline
+         * }
+         */
+        var MultiOptionsPolyline = L.FeatureGroup.extend({
+
+          initialize: function (latlngs, options) {
+            var copyBaseOptions = options.multiOptions.copyBaseOptions;
+
+            this._layers = {};
+            this._options = options;
+            if (copyBaseOptions === undefined || copyBaseOptions) {
+              this._copyBaseOptions();
+            }
+
+            this.setLatLngs(latlngs);
+          },
+
+          _copyBaseOptions: function () {
+            var multiOptions = this._options.multiOptions,
+                    baseOptions,
+                    optionsArray = multiOptions.options,
+                    i, len = optionsArray.length;
+
+            baseOptions = L.extend({}, this._options);
+            delete baseOptions.multiOptions;
+
+            for (i = 0; i < len; ++i) {
+              optionsArray[i] = L.extend({}, baseOptions, optionsArray[i]);
+            }
+          },
+
+          setLatLngs: function (latlngs) {
+            var i, len = latlngs.length,
+                    multiOptions = this._options.multiOptions,
+                    optionIdxFn = multiOptions.optionIdxFn,
+                    fnContext = multiOptions.fnContext || this,
+                    prevOptionIdx, optionIdx,
+                    segmentLatlngs;
+
+            this._originalLatlngs = latlngs;
+
+            this.eachLayer(function (layer) {
+              this.removeLayer(layer);
+            }, this);
+
+            for (i = 1; i < len; ++i) {
+              optionIdx = optionIdxFn.call(
+                      fnContext, latlngs[i], latlngs[i - 1], i, latlngs);
+
+              if (i === 1) {
+                segmentLatlngs = [latlngs[0]];
+                prevOptionIdx = optionIdxFn.call(fnContext, latlngs[0], latlngs[0], 0, latlngs);
+              }
+
+              segmentLatlngs.push(latlngs[i]);
+
+              // is there a change in options or is it the last point?
+              if (prevOptionIdx !== optionIdx || i === len - 1) {
+                // Check if options is a function or an array
+                if (typeof multiOptions.options === "function") {
+                  this.addLayer(L.polyline(segmentLatlngs, multiOptions.options(prevOptionIdx)));
+                } else {
+                  this.addLayer(L.polyline(segmentLatlngs, multiOptions.options[prevOptionIdx]));
+                }
+
+                prevOptionIdx = optionIdx;
+                segmentLatlngs = [latlngs[i]];
+              }
+            }
+
+            return this;
+          },
+
+          getLatLngs: function () {
+            return this._originalLatlngs;
+          },
+
+          getLatLngsSegments: function () {
+            var latlngs = [];
+
+            this.eachLayer(function (layer) {
+              latlngs.push(layer.getLatLngs());
+            });
+
+            return latlngs;
+          }
+        });
+
+        L.MultiOptionsPolyline = MultiOptionsPolyline;
+        L.multiOptionsPolyline = function (latlngs, options) {
+          return new MultiOptionsPolyline(latlngs, options);
+        };
+
+      }));
+
       "use strict";
 
       let hud;
@@ -110,10 +225,57 @@
         window.open(url,'_blank');
       }
 
+      let polyline;
+      function computeThresholds(min, max){
+        var step = (max-min)/9;
+        var threshold = min;
+        var thresholds = [threshold];
+        for (let pas = 0; pas < 7; pas++) {
+          thresholds.push(threshold += step);
+        }
+        return thresholds
+      }
       function updateMap(msg) {
           var pos = L.latLng(msg.latitude, msg.longitude);
           marker.setLatLng(pos);
           marker.setRotationAngle(msg.heading);
+          console.log(msg.traces);
+          if(polyline != undefined){
+            polyline.remove();
+          }
+          var trbk = JSON.parse(msg.traces);
+        for (let i = 0; i < trbk.length ; i++) {
+          console.log("Changing" + trbk[i])
+          trbk[i]['alt'] = trbk[i]['Alt'];
+          trbk[i]['lat'] = trbk[i]['Lat'];
+          trbk[i]['lng'] = trbk[i]['Lng'];
+        }
+        console.log("trkb" + trbk)
+        var alts = trbk.map(x => x['alt'])
+        polyline = L.multiOptionsPolyline(trbk, {
+          multiOptions: {
+            optionIdxFn: function (latLng) {
+
+              var i,
+                      altThresholds = computeThresholds(Math.min.apply(Math, alts), Math.max.apply(Math, alts));
+
+              for (i = 0; i < altThresholds.length; ++i) {
+                if (latLng.alt <= altThresholds[i]) {
+                  return i;
+                }
+              }
+              return altThresholds.length;
+            },
+            options: [
+              {color: '#0000FF'}, {color: '#0040FF'}, {color: '#0080FF'},
+              {color: '#00FFB0'}, {color: '#00E000'}, {color: '#80FF00'},
+              {color: '#FFFF00'}, {color: '#FFC000'}, {color: '#FF0000'}
+            ]
+          },
+          weight: 5,
+          lineCap: 'butt',
+          opacity: 0.75,
+          smoothFactor: 1}).addTo(map);
 
           plane_popup.pos.innerText = Number(pos.lat).toFixed(6) + "," + Number(pos.lng).toFixed(6);
           //plane_popup.gmap.innerHTML = "<a href=\"https://www.google.com/maps/@" + pos.lat + "," + pos.lng + "," + map.getZoom() + "z\">google maps</a>";
@@ -136,25 +298,24 @@
 
       ws = new WebSocket("ws://" + window.location.hostname + ":" + window.location.port + "/ws");
       ws.onopen = function() {
-        //console.log("ws open");
+        console.log("ws open");
       };
       ws.onclose = function() {
-        //console.log("ws close");
+        console.log("ws close");
       };
       ws.onmessage = function(e) {
         var msg = JSON.parse(e.data);
-        //console.log("ws data", msg);
+        console.log("ws data", msg);
         last_report = msg;
 
         updateHUD(msg);
-
         if (map !== undefined) {
           updateMap(msg);
         }
       };
 
       function initMap() {
-        var pos = L.latLng(52.4727,-1.7523);
+        var pos = L.latLng(43.65446, 6.92198);
 
         var osm = new L.TileLayer("http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 18,

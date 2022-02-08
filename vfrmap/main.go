@@ -8,17 +8,19 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"syscall"
 	"time"
 	"unsafe"
 
-	"github.com/lian/msfs2020-go/simconnect"
-	"github.com/lian/msfs2020-go/vfrmap/html/leafletjs"
-	"github.com/lian/msfs2020-go/vfrmap/websockets"
+	"github.com/NassimBounouas/msfs2020-go/simconnect"
+	"github.com/NassimBounouas/msfs2020-go/vfrmap/html/leafletjs"
+	"github.com/NassimBounouas/msfs2020-go/vfrmap/websockets"
 )
 
 type Report struct {
@@ -34,6 +36,12 @@ type Report struct {
 	Flaps         float64   `name:"TRAILING EDGE FLAPS LEFT ANGLE" unit:"degrees"`
 	Trim          float64   `name:"ELEVATOR TRIM PCT" unit:"percent"`
 	RudderTrim    float64   `name:"RUDDER TRIM PCT" unit:"percent"`
+}
+
+type ReportTrace struct {
+	Alt float64
+	Lat float64
+	Lng float64
 }
 
 func (r *Report) RequestData(s *simconnect.SimConnect) {
@@ -109,7 +117,7 @@ func main() {
 	exePath, _ := os.Executable()
 
 	ws := websockets.New()
-
+	traces := []ReportTrace{}
 	s, err := simconnect.New("msfs2020-go/vfrmap")
 	if err != nil {
 		panic(err)
@@ -151,9 +159,10 @@ func main() {
 			w.Header().Set("Content-Type", "text/html")
 
 			filePath := filepath.Join(filepath.Dir(exePath), "index.html")
-
+			fmt.Println("Serving", filePath)
 			if _, err = os.Stat(filePath); os.IsNotExist(err) {
 				w.Write(MustAsset(filepath.Base(filePath)))
+				fmt.Println("First choice")
 			} else {
 				fmt.Println("use local", filePath)
 				http.ServeFile(w, r, filePath)
@@ -249,7 +258,20 @@ func main() {
 					if verbose {
 						fmt.Printf("REPORT: %#v\n", report)
 					}
+					currentTrace := ReportTrace{Alt: math.Round(report.Altitude*100) / 100, Lat: math.Round(report.Latitude*1000000) / 1000000, Lng: math.Round(report.Longitude*1000000) / 1000000}
+					if len(traces) > 0 {
+						fmt.Println(reflect.DeepEqual(currentTrace, traces[len(traces)-1]))
+						fmt.Println(currentTrace)
+						fmt.Println(traces[len(traces)-1])
+					}
 
+					if len(traces) > 0 && reflect.DeepEqual(currentTrace, traces[len(traces)-1]) {
+						fmt.Printf("Same trace, doesn't saving it")
+					} else {
+						traces = append(traces, currentTrace)
+					}
+
+					j, _ := json.Marshal(traces)
 					ws.Broadcast(map[string]interface{}{
 						"type":           "plane",
 						"latitude":       report.Latitude,
@@ -262,6 +284,7 @@ func main() {
 						"flaps":          fmt.Sprintf("%.0f", report.Flaps),
 						"trim":           fmt.Sprintf("%.1f", report.Trim),
 						"rudder_trim":    fmt.Sprintf("%.1f", report.RudderTrim),
+						"traces":         string(j),
 					})
 
 				case s.DefineMap["TrafficReport"]:
