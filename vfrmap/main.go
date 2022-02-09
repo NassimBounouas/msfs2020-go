@@ -118,6 +118,7 @@ func main() {
 
 	ws := websockets.New()
 	traces := []ReportTrace{}
+	notSavedCounter := 0
 	s, err := simconnect.New("msfs2020-go/vfrmap")
 	if err != nil {
 		panic(err)
@@ -265,8 +266,24 @@ func main() {
 						fmt.Println(traces[len(traces)-1])
 					}
 
-					if len(traces) > 0 && reflect.DeepEqual(currentTrace, traces[len(traces)-1]) {
-						fmt.Printf("Same trace, doesn't saving it")
+					if len(traces) > 0 {
+						if reflect.DeepEqual(currentTrace, traces[len(traces)-1]) {
+							fmt.Printf("Same trace, doesn't saving it")
+						} else if math.Abs(traces[len(traces)-1].Lat-currentTrace.Lat) < 0.0002 && math.Abs(traces[len(traces)-1].Lng-currentTrace.Lng) < 0.0002 {
+							fmt.Println(traces[len(traces)-1])
+							fmt.Println(currentTrace)
+							fmt.Printf("Lat diff %f\n", traces[len(traces)-1].Lat-currentTrace.Lat)
+							fmt.Printf("Lng diff %f\n", traces[len(traces)-1].Lng-currentTrace.Lng)
+							fmt.Printf("Less than 20 meters diff, doesn't saving it : %d", notSavedCounter)
+							notSavedCounter++
+						} else {
+							fmt.Println("Saving it !")
+							fmt.Println(traces[len(traces)-1])
+							fmt.Println(currentTrace)
+							fmt.Printf("Lat diff %f - %f =  %f\n", traces[len(traces)-1].Lat, currentTrace.Lat, traces[len(traces)-1].Lat-currentTrace.Lat)
+							fmt.Printf("Lng diff %f - %f = %f\n", traces[len(traces)-1].Lng, currentTrace.Lng, traces[len(traces)-1].Lng-currentTrace.Lng)
+							traces = append(traces, currentTrace)
+						}
 					} else {
 						traces = append(traces, currentTrace)
 					}

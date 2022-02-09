@@ -68,7 +68,7 @@
         padding-right: 0.2em;
       }
     </style>
-
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
 
       (function (root, factory) {
@@ -239,18 +239,15 @@
           var pos = L.latLng(msg.latitude, msg.longitude);
           marker.setLatLng(pos);
           marker.setRotationAngle(msg.heading);
-          console.log(msg.traces);
           if(polyline != undefined){
             polyline.remove();
           }
           var trbk = JSON.parse(msg.traces);
         for (let i = 0; i < trbk.length ; i++) {
-          console.log("Changing" + trbk[i])
           trbk[i]['alt'] = trbk[i]['Alt'];
           trbk[i]['lat'] = trbk[i]['Lat'];
           trbk[i]['lng'] = trbk[i]['Lng'];
         }
-        console.log("trkb" + trbk)
         var alts = trbk.map(x => x['alt'])
         polyline = L.multiOptionsPolyline(trbk, {
           multiOptions: {
@@ -298,14 +295,14 @@
 
       ws = new WebSocket("ws://" + window.location.hostname + ":" + window.location.port + "/ws");
       ws.onopen = function() {
-        console.log("ws open");
+       // console.log("ws open");
       };
       ws.onclose = function() {
-        console.log("ws close");
+       // console.log("ws close");
       };
       ws.onmessage = function(e) {
         var msg = JSON.parse(e.data);
-        console.log("ws data", msg);
+        //console.log("ws data", msg);
         last_report = msg;
 
         updateHUD(msg);
@@ -515,5 +512,39 @@
       </div>
 
     </div>
+    <div>
+      <canvas id="myChart"></canvas>
+    </div>
+    <script>
+      const labels = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+      ];
+
+      const data = {
+        labels: labels,
+        datasets: [{
+          label: 'My First dataset',
+          backgroundColor: 'rgb(255, 99, 132)',
+          borderColor: 'rgb(255, 99, 132)',
+          data: [0, 10, 5, 2, 20, 30, 45],
+        }]
+      };
+
+      const config = {
+        type: 'line',
+        data: data,
+        options: {}
+      };
+
+      const myChart = new Chart(
+              document.getElementById('myChart'),
+              config
+      );
+    </script>
   </body>
 </html>
