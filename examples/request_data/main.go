@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lian/msfs2020-go/simconnect"
+	"github.com/NassimBounouas/msfs2020-go/simconnect"
 )
 
 // ported from: MSFS-SDK/Samples/SimConnectSamples/RequestData/RequestData.cpp
@@ -12,11 +12,13 @@ import (
 
 type Report struct {
 	simconnect.RecvSimobjectDataByType
-	Title     [256]byte `name:"TITLE"`
-	Kohlsman  float64   `name:"Kohlsman setting hg" unit:"inHg"`
-	Altitude  float64   `name:"Plane Altitude" unit:"feet"`
-	Latitude  float64   `name:"Plane Latitude" unit:"degrees"`
-	Longitude float64   `name:"Plane Longitude" unit:"degrees"`
+	Title        [256]byte `name:"TITLE"`
+	Kohlsman     float64   `name:"Kohlsman setting hg" unit:"inHg"`
+	Altitude     float64   `name:"Plane Altitude" unit:"feet"`
+	Latitude     float64   `name:"Plane Latitude" unit:"degrees"`
+	Longitude    float64   `name:"Plane Longitude" unit:"degrees"`
+	GearOnGround int32     `name:"GEAR IS ON GROUND"` // SimConnect has no BOOL data type. For this kind of value, you can use an int or a float, and the simulation will interpret 0 as false, and anything over 0 will be interpreted as true.
+	SimOnGround  int32     `name:"SIM ON GROUND"`
 }
 
 func (r *Report) RequestData(s *simconnect.SimConnect) {
@@ -85,7 +87,7 @@ func main() {
 			switch recvData.RequestID {
 			case s.DefineMap["Report"]:
 				report := (*Report)(ppData)
-				fmt.Printf("REPORT: %s: GPS: %.6f,%.6f Altitude: %.0f\n", report.Title, report.Latitude, report.Longitude, report.Altitude)
+				fmt.Printf("REPORT: %s: GPS: %.6f,%.6f Altitude: %.0f, Gear on ground: %d, Sim on ground: %d\n", report.Title, report.Latitude, report.Longitude, report.Altitude, report.GearOnGround, report.SimOnGround)
 				report.RequestData(s)
 			}
 
